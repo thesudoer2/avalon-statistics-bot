@@ -1,0 +1,16 @@
+{
+  "name": "telegram-echo-bot",
+  "version": "1.0.0",
+  "description": "A simple Telegram Avalon Bot for Cloudflare Workers",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "crypto-js": "^4.2.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.23.0"
+  }
+}
