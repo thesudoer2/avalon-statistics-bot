@@ -107,7 +107,7 @@ export default {
 
                   const messageList = await Promise.all(allMessages.map(msg => {
                     if (msg === null) {
-                      throw new Error("The database and cache seem to be syncing.\nIf something is wrong, please contact administrator.");
+                      throw new Error("The database and cache seem to be syncing. Please Wait ...\nIf something is wrong, please contact administrator.");
                     }
 
                     try {
@@ -219,26 +219,55 @@ export default {
                 break;
 
               case "/getdata":
-                if (userId.toString() === env.ADMIN_USER_ID) {
-                  const allMessages = await storageGetAllMessages(env);
-                  const messageList = allMessages.map(msg => {
-                    const decrypted_message = decryptMessageNoExcept(env, msg.encryptedMessage).then(res => res);
-                    const time_stamp = new Date(msg.timestamp).toLocaleTimeString();
-                    const message_data = JSON.parse(msg);
+                try {
+                  if (userId.toString() === env.ADMIN_USER_ID) {
+                    const allMessages = await storageGetAllMessages(env);
+                    let messageList = [];
+                    for (const msg of allMessages) {
+                      try {
+                        if (msg) {
+                          // const decrypted_message = await decryptMessageNoExcept(env, msg.encryptedMessage);
+                          // const decryptedMessage = await decryptMessageExcept(env, msg.encryptedMessage);
 
-                    return `- ${decrypted_message} (${time_stamp}) => message data : ${message_data}`;
+                          // 1. Base64 decode
+                          const encryptedBuffer = await decodeBase64(msg.encryptedMessage);
+
+                          // 2. Decrypt with AES
+                          const decryptedMessage = await decryptAES(encryptedBuffer, default_encryption_key);
+
+                          const time_stamp = new Date(msg.timestamp).toLocaleTimeString();
+                          messageList.push(`=>${decryptedMessage} (${time_stamp}) -- winner : ${msg.winner}`);
+                        }
+                      } catch (error) {
+                        throw new Error(`${error}\n\nMessage: ${msg.encryptedMessage}\n\nKey: ${msg.gameHash}`);
+                      }
+                    }
+
+                    // const messageList = await Promise.all(allMessages.map(msg => {
+                    //   const decrypted_message = decryptMessageNoExcept(env, msg.encryptedMessage).then(res => res);
+                    //   const time_stamp = new Date(msg.timestamp).toLocaleTimeString();
+
+                    //   return `=>${decrypted_message} (${time_stamp})`;
+                    // }));
+
+                    await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                      chat_id: chatId,
+                      text: `✉️ Messages:\n${messageList.join("\n")}`,
+                      parse_mode: "Markdown",
+                    });
+                  } else {
+                    await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                      chat_id: chatId,
+                      text: "⛔ Admin only command!",
+                      parse_mode: "Markdown",
+                    });
                   }
-                  ).join('\n');
-
+                } catch (error) {
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
-                    text: `✉️ Messages:\n${messageList}`,
-                    parse_mode: "Markdown",
-                  });
-                } else {
-                  await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                    chat_id: chatId,
-                    text: "⛔ Admin only command!",
+                    text:
+                      "❌ Failed to process messages!\n\n" +
+                      error,
                     parse_mode: "Markdown",
                   });
                 }
@@ -434,7 +463,7 @@ async function sendTelegramMessage(botToken, messageData) {
   });
 }
 
-function decodeBase64(base64Message) {
+async function decodeBase64(base64Message) {
   // try {
   //   const decoded = atob(base64);
   //   if (!decoded) {
@@ -467,7 +496,7 @@ async function decryptAES(encryptedData, password) {
 
 async function decryptMessageExcept(env, encryptedData) {
   // 1. Base64 decode
-  const encryptedBuffer = decodeBase64(encryptedData);
+  const encryptedBuffer = await decodeBase64(encryptedData);
 
   // 2. Decrypt with AES
   const decrypted = await decryptAES(encryptedBuffer, env.ENCRYPTION_KEY);
