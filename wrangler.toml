@@ -7,11 +7,14 @@ workers_dev = true
 [[kv_namespaces]]
 binding = "KV_BINDING"
 id = "KV_ID"
-# preview_id = "DEVELOPMENT_KV_ID" # Optional
+preview_id = "KV_PREVIEW_ID" # Optional
 
 [vars]
-TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_TOKEN"
-ADMIN_USER_ID = "ADMIN_USER_ID_HERE"
+TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+ADMIN_USER_ID = "ADMIN_USER_ID"
+
+[triggers]
+crons = ["0 0 * * *"]  # Daily export
 
 [observability.logs]
 enabled = true
