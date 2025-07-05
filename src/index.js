@@ -1,7 +1,15 @@
 import CryptoJS from "crypto-js";
 
-// In-memory storage for messages
-const messageStorage = new Set();
+import {
+  storageStoreMessage,
+  storageGetMessage,
+  storageGetAllMessages,
+  storageGetAllKeys,
+  storageClearStorage,
+  storageGetMessageCount,
+  storageHasKey
+} from './storage/kvStorage.js';
+
 
 export default {
   async fetch(request, env) {
@@ -14,7 +22,7 @@ export default {
       "  /exportnow - Export stored data to persistent storage\n" +
       "  /setkey [key] - Set encryption key (not persistent)";
 
-    const default_encryption_key = "YOUR_ENCRYPTION_KEY";
+    const default_encryption_key = "YOUR_SECRET_KEY";
 
     if (request.method === "POST") {
       try {
@@ -28,11 +36,12 @@ export default {
 
           // Store message metadata
           const messageData = {
-            userId,
-            chatId,
-            text: messageText,
-            timestamp,
-            decrypted: false,
+            userId: userId,
+            chatId: chatId,
+            timestamp: timestamp,
+            encryptedMessage: null,
+            gameHash: null,
+            winner: null
           };
 
           // Handle commands
@@ -71,23 +80,111 @@ export default {
                 break;
 
               case "/stats":
-                const messageList = [...messageStorage]
-                  .map(
-                    (msg) =>
-                      `=> ${msg.text} (${new Date(msg.timestamp).toLocaleTimeString()})`,
-                  )
-                  .join("\n");
+                try {
+                  const allMessages = await storageGetAllMessages(env);
+                  // const messageList = allMessages.map(msg =>
+                  //   `- ${msg.encryptedMessage} (${new Date(msg.timestamp).toLocaleTimeString()})`
+                  // ).join('\n');
 
-                await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                  chat_id: chatId,
-                  text:
-                    `📊 *Storage Stats:*\n\n` +
-                    `- *Encrypted messages:* ${messageStorage.size}\n` +
-                    `- *Messages (${messageStorage.size}):*\n${messageList || "=> No messages"}\n\n` +
-                    `- *Last export:* ${env.LAST_EXPORT_TIME || "Never"}`,
-                  parse_mode: "Markdown",
-                });
+                  // const messageList = allMessages.map(msg => {
+                  //   try {
+                  //     const decryptedMessage = decryptMessageNoExcept(env, msg.encryptedMessage).then(res => res);
+                  //     return `- ${msg.encryptedMessage} (${new Date(msg.timestamp).toLocaleTimeString()}) -- ${decryptedMessage}`;
+                  //   } catch (error) {
+                  //     throw new Error(`${error}\n\nMessage: ${msg.encryptedMessage}\n\nKey: ${msg.gameHash}`);
+                  //   }
+                  // }).join('\n');
+
+                  const allKeys = await storageGetAllKeys(env);
+                  await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                    chat_id: chatId,
+                    text:
+                      `>>>> all keys (${allKeys.length}) : ${allKeys}\n`,
+                    parse_mode: "Markdown",
+                  });
+
+                  const messageList = await Promise.all(allMessages.map(msg => {
+                    try {
+                      const decryptedMessage = decryptMessageNoExcept(env, msg.encryptedMessage).then(res => res);
+                      return `- ${msg.encryptedMessage} (${new Date(msg.timestamp).toLocaleTimeString()}) -- ${decryptedMessage}`;
+                    } catch (error) {
+                      throw new Error(`${error}\n\nMessage: ${msg.encryptedMessage}\n\nKey: ${msg.gameHash}`);
+                    }
+                  }));
+
+                  await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                    chat_id: chatId,
+                    text:
+                      `📊 *Storage Stats:*\n\n` +
+                      `- *Encrypted messages:* ${allMessages.length}\n` +
+                      // `- *Messages:*\n${messageList || "=> No messages"}\n\n` +
+                      `- *Messages:*\n${messageList.join('\n') || "=> No messages"}\n\n` +
+                      `- *Last export:* ${env.LAST_EXPORT_TIME || "Never"}`,
+                    parse_mode: "Markdown",
+                  });
+                } catch (error) {
+                  await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                    chat_id: chatId,
+                    text:
+                      "❌ Failed to fetch stats\n\n" +
+                      `${error}`,
+                    parse_mode: "Markdown",
+                  });
+                }
                 break;
+
+              // case "/stats":
+              //   try {
+              //       const allKeys = await storageGetAllKeys(env);
+
+              //       if (allKeys.length != 0) {
+              //         await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+              //           chat_id: chatId,
+              //           text:
+              //             `>>>> all keys (${allKeys.length}) : ${allKeys}\n`,
+              //           parse_mode: "Markdown",
+              //         });
+
+              //         const messages = await Promise.all(
+              //           allKeys.map(async key => {
+              //             const msgData = await storageGetMessage(env, key);
+              //             const decryptedMsg = await decryptMessageNoExcept(env, msgData.encryptedMessage);
+              //             return `- ${msgData.encryptedMessage} (${new Date(msgData.timestamp).toLocaleTimeString()}) -- ${decryptedMsg}`;
+              //           })
+              //         );
+
+              //         await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+              //             chat_id: chatId,
+              //             text:
+              //                 `📊 *Storage Stats:*\n\n` +
+              //                 `- *Total Messages:* ${allKeys.length}\n` +
+              //                 `- *Messages:*\n${messages.join('\n') || "=> No messages"}\n\n` +
+              //                 `- *Last export:* ${env.LAST_EXPORT_TIME || "Never"}`,
+              //             parse_mode: "Markdown",
+              //         });
+              //       } else {
+              //         await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+              //           chat_id: chatId,
+              //           text:
+              //               `📊 *Storage Stats:*\n\n` +
+              //               `- *Total Messages:* 0\n` +
+              //               "- *Messages:*\n" +
+              //               "=> No messages\n\n" +
+              //               `- *Last export:* ${env.LAST_EXPORT_TIME || "Never"}`,
+              //           parse_mode: "Markdown",
+              //         });
+              //       }
+              //   } catch (error) {
+              //       await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+              //           chat_id: chatId,
+              //           text:
+              //             "❌ Failed to fetch stats\n\n" +
+              //             `${error}\n\n` +
+              //             `Message: ${msgData.encryptedMessage}`,
+              //           parse_mode: "Markdown",
+              //       });
+              //   }
+              //   break;
 
               case "/exportnow":
                 if (userId.toString() === env.ADMIN_USER_ID) {
@@ -101,6 +198,64 @@ export default {
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
                     text: "⛔ Admin only command!",
+                    parse_mode: "Markdown",
+                  });
+                }
+                break;
+
+              case "/getdata":
+                if (userId.toString() === env.ADMIN_USER_ID) {
+                  const allMessages = await storageGetAllMessages(env);
+                  const messageList = allMessages.map(msg => {
+                    const decrypted_message = decryptMessageNoExcept(env, msg.encryptedMessage).then(res => res);
+                    const time_stamp = new Date(msg.timestamp).toLocaleTimeString();
+                    const message_data = JSON.parse(msg);
+
+                    return `- ${decrypted_message} (${time_stamp}) => message data : ${message_data}`;
+                  }
+                  ).join('\n');
+
+                  await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                    chat_id: chatId,
+                    text: `✉️ Messages:\n${messageList}`,
+                    parse_mode: "Markdown",
+                  });
+                } else {
+                  await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                    chat_id: chatId,
+                    text: "⛔ Admin only command!",
+                    parse_mode: "Markdown",
+                  });
+                }
+                break;
+
+              case "/flushdb":
+                try {
+                  if (userId.toString() === env.ADMIN_USER_ID) {
+                    const deletedCount = await storageClearStorage(env);
+
+                    // const allKeys = await storageGetAllKeys(env);
+                    // const deletedCount = allKeys.length;
+                    // allKeys.map(key => env.KV_BINDING.delete(key.name));
+
+                    await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                      chat_id: chatId,
+                      text: `♻️ Storage cleared! Deleted ${deletedCount} messages.`,
+                      parse_mode: "Markdown",
+                    });
+                  } else {
+                    await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                      chat_id: chatId,
+                      text: "⛔ Admin only command!",
+                      parse_mode: "Markdown",
+                    });
+                  }
+                } catch (error) {
+                  await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                    chat_id: chatId,
+                    text:
+                      "❌ Storage flush failed!\n\n" +
+                      `${error}`,
                     parse_mode: "Markdown",
                   });
                 }
@@ -168,6 +323,13 @@ export default {
               // Decode & decrypt input message
               const decryptedMessage = await decryptMessageExcept(env, encryptedMessage);
 
+              await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                  chat_id: chatId,
+                  text:
+                    `>>>> before parsing json : ${decryptedMessage}\n`,
+                  parse_mode: "Markdown",
+                });
+
               // Parse JSON
               let decryptedMessageJson;
               try {
@@ -176,17 +338,45 @@ export default {
                 throw new Error("JSON parse failed: " + e.message);
               }
 
+              await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                  chat_id: chatId,
+                  text:
+                    `>>>> after parsing json : ${decryptedMessageJson}\n`,
+                  parse_mode: "Markdown",
+                });
+
               // Add input message to message storage after validating.
-              messageData.text = `Message: ${encryptedMessage}`;
-              messageStorage.add(messageData);
+              messageData.encryptedMessage = encryptedMessage;
+              messageData.gameHash = decryptedMessageJson.game_info.final_hash_of_game;
+              messageData.winner = who_won;
+
+              const keyExists = await storageHasKey(env, messageData.gameHash);
 
               await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                chat_id: chatId,
-                text:
-                  "💾 Message was stored in memory.\n" +
-                  "It will exported to excel in scheduled time.",
-                parse_mode: "Markdown",
-              });
+                  chat_id: chatId,
+                  text:
+                    `>>>> has key result : ${keyExists}\n`,
+                  parse_mode: "Markdown",
+                });
+
+              if (keyExists === true) {
+                await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                  chat_id: chatId,
+                  text:
+                    `❗ Key (${messageData.gameHash}) already exists!\n`,
+                  parse_mode: "Markdown",
+                });
+              } else {
+                storageStoreMessage(env, messageData);
+
+                await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                  chat_id: chatId,
+                  text:
+                    `💾 Message was stored in memory (Game Hash : ${messageData.gameHash}).\n` +
+                    "It will exported to excel in scheduled time.",
+                  parse_mode: "Markdown",
+                });
+              }
             } catch (error) {
               await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                 chat_id: chatId,
