@@ -96,6 +96,8 @@ export default {
                   // }).join('\n');
 
                   const allKeys = await storageGetAllKeys(env);
+                  const keysCount = allKeys.length;
+
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
                     text:
@@ -104,9 +106,22 @@ export default {
                   });
 
                   const messageList = await Promise.all(allMessages.map(msg => {
+                    if (msg === null) {
+                      throw new Error("The database and cache seem to be syncing.\nIf something is wrong, please contact administrator.");
+                    }
+
                     try {
-                      const decryptedMessage = decryptMessageNoExcept(env, msg.encryptedMessage).then(res => res);
-                      return `- ${msg.encryptedMessage} (${new Date(msg.timestamp).toLocaleTimeString()}) -- ${decryptedMessage}`;
+                      if (msg.encryptedMessage) {
+                        let finalString = `=>${msg.encryptedMessage}`;
+
+                        if (msg.timestamp) {
+                          finalString += ` (${new Date(msg.timestamp).toLocaleTimeString()})`;
+                        }
+
+                        return finalString;
+                      } else {
+                        return "Nothing!";
+                      }
                     } catch (error) {
                       throw new Error(`${error}\n\nMessage: ${msg.encryptedMessage}\n\nKey: ${msg.gameHash}`);
                     }
@@ -232,15 +247,12 @@ export default {
               case "/flushdb":
                 try {
                   if (userId.toString() === env.ADMIN_USER_ID) {
-                    const deletedCount = await storageClearStorage(env);
-
-                    // const allKeys = await storageGetAllKeys(env);
-                    // const deletedCount = allKeys.length;
-                    // allKeys.map(key => env.KV_BINDING.delete(key.name));
-
+                    const deletedKeys = await storageClearStorage(env);
                     await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                       chat_id: chatId,
-                      text: `♻️ Storage cleared! Deleted ${deletedCount} messages.`,
+                      text:
+                        `♻️ Storage cleared! Deleted ${deletedKeys.length} messages.\n` +
+                        `Deleted Keys: ${deletedKeys.join(', ') || "Nothing!"}`,
                       parse_mode: "Markdown",
                     });
                   } else {
@@ -350,14 +362,21 @@ export default {
               messageData.gameHash = decryptedMessageJson.game_info.final_hash_of_game;
               messageData.winner = who_won;
 
+              await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                chat_id: chatId,
+                text:
+                  `>>>> typeof gameHash : ${typeof messageData.gameHash}\n`,
+                parse_mode: "Markdown",
+              });
+
               const keyExists = await storageHasKey(env, messageData.gameHash);
 
               await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                  chat_id: chatId,
-                  text:
-                    `>>>> has key result : ${keyExists}\n`,
-                  parse_mode: "Markdown",
-                });
+                chat_id: chatId,
+                text:
+                  `>>>> has key result : ${keyExists}\n`,
+                parse_mode: "Markdown",
+              });
 
               if (keyExists === true) {
                 await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {

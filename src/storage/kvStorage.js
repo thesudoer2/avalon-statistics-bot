@@ -39,9 +39,8 @@ export async function storageHasKey(env, gameHashKey) {
 export async function storageClearStorage(env) {
   try {
     const allKeys = await storageGetAllKeys(env);
-    const totalDeleted = allKeys.length;
-    await allKeys.map(key => env.KV_BINDING.delete(key.name));
-    return totalDeleted;
+    await allKeys.map(key => env.KV_BINDING.delete(key));
+    return allKeys;
   } catch (error) {
     throw error;
   }
