@@ -1,5 +1,3 @@
-import CryptoJS from "crypto-js";
-
 import {
   storageStoreMessage,
   storageGetMessage,
@@ -9,6 +7,10 @@ import {
   storageGetMessageCount,
   storageHasKey
 } from './storage/kvStorage.js';
+
+import * as AESCrypto from "./AESCrypto.js";
+import * as ExcelHandler from "./ExcelHandler2.js";
+import * as TimeZone from './Time.js';
 
 
 export default {
@@ -20,9 +22,12 @@ export default {
       "  /stats - Storage stats\n" +
       "  /sheet - View sheet\n" +
       "  /exportnow - Export stored data to persistent storage\n" +
-      "  /setkey [key] - Set encryption key (not persistent)";
+      "  /setkey [key] - Set encryption key (not persistent)\n" +
+      "  /getkey - Get current encryption key";
 
     const default_encryption_key = "YOUR_SECRET_KEY";
+
+    TimeZone.TimeSettings.GLOBAL_TIMEZONE = env.TZ || 'UTC';
 
     if (request.method === "POST") {
       try {
@@ -32,13 +37,12 @@ export default {
           const chatId = update.message.chat.id;
           const userId = update.message.from.id;
           const messageText = update.message.text;
-          const timestamp = new Date().toISOString();
 
           // Store message metadata
           const messageData = {
             userId: userId,
             chatId: chatId,
-            timestamp: timestamp,
+            timestamp: null,
             encryptedMessage: null,
             gameHash: null,
             winner: null
@@ -82,18 +86,6 @@ export default {
               case "/stats":
                 try {
                   const allMessages = await storageGetAllMessages(env);
-                  // const messageList = allMessages.map(msg =>
-                  //   `- ${msg.encryptedMessage} (${new Date(msg.timestamp).toLocaleTimeString()})`
-                  // ).join('\n');
-
-                  // const messageList = allMessages.map(msg => {
-                  //   try {
-                  //     const decryptedMessage = decryptMessageNoExcept(env, msg.encryptedMessage).then(res => res);
-                  //     return `- ${msg.encryptedMessage} (${new Date(msg.timestamp).toLocaleTimeString()}) -- ${decryptedMessage}`;
-                  //   } catch (error) {
-                  //     throw new Error(`${error}\n\nMessage: ${msg.encryptedMessage}\n\nKey: ${msg.gameHash}`);
-                  //   }
-                  // }).join('\n');
 
                   const allKeys = await storageGetAllKeys(env);
                   const keysCount = allKeys.length;
@@ -115,7 +107,7 @@ export default {
                         let finalString = `=>${msg.encryptedMessage}`;
 
                         if (msg.timestamp) {
-                          finalString += ` (${new Date(msg.timestamp).toLocaleTimeString()})`;
+                          finalString += ` (${TimeZone.timestampToDateTime(msg.timestamp)})`;
                         }
 
                         return finalString;
@@ -225,30 +217,29 @@ export default {
                     let messageList = [];
                     for (const msg of allMessages) {
                       try {
-                        if (msg) {
-                          // const decrypted_message = await decryptMessageNoExcept(env, msg.encryptedMessage);
-                          // const decryptedMessage = await decryptMessageExcept(env, msg.encryptedMessage);
+                        if (!msg) continue;
 
-                          // 1. Base64 decode
-                          const encryptedBuffer = await decodeBase64(msg.encryptedMessage);
-
-                          // 2. Decrypt with AES
-                          const decryptedMessage = await decryptAES(encryptedBuffer, default_encryption_key);
-
-                          const time_stamp = new Date(msg.timestamp).toLocaleTimeString();
-                          messageList.push(`=>${decryptedMessage} (${time_stamp}) -- winner : ${msg.winner}`);
+                        if (!env.ENCRYPTION_KEY) {
+                          env.ENCRYPTION_KEY = default_encryption_key;
+                          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                            chat_id: chatId,
+                            text:
+                              "🔐 No encryption key set!\n\n" +
+                              "Continue with default encryption key...\n" +
+                              "(if you want to set custom encryption key, use /setkey command)",
+                            parse_mode: "Markdown",
+                          });
                         }
+
+                        // Decode & decrypt input message
+                        const decryptedMessage = await AESCrypto.decryptMessageNoExcept(env.ENCRYPTION_KEY, msg.encryptedMessage);
+
+                        const timestamp = `${TimeZone.timestampToDateTime(msg.timestamp)}`;
+                        messageList.push(`=>${decryptedMessage} (${timestamp}) -- winner : ${msg.winner}`);
                       } catch (error) {
                         throw new Error(`${error}\n\nMessage: ${msg.encryptedMessage}\n\nKey: ${msg.gameHash}`);
                       }
                     }
-
-                    // const messageList = await Promise.all(allMessages.map(msg => {
-                    //   const decrypted_message = decryptMessageNoExcept(env, msg.encryptedMessage).then(res => res);
-                    //   const time_stamp = new Date(msg.timestamp).toLocaleTimeString();
-
-                    //   return `=>${decrypted_message} (${time_stamp})`;
-                    // }));
 
                     await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                       chat_id: chatId,
@@ -310,14 +301,33 @@ export default {
                     chat_id: chatId,
                     text:
                       "🔑 Encryption key set successfully!\n" +
-                      `Your key is: ${newKey}\n\n` +
-                      "Now send me your encrypted messages.",
+                      `Your key is: ${newKey}`,
                     parse_mode: "Markdown",
                   });
                 } else {
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
                     text: "Please provide an encryption key after /setkey command",
+                    parse_mode: "Markdown",
+                  });
+                }
+                break;
+
+              case "/getkey":
+                if (!env.ENCRYPTION_KEY || env.ENCRYPTION_KEY === default_encryption_key) {
+                  await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                    chat_id: chatId,
+                    text:
+                      "🔑 No encryption key has been set or using default one!\n" +
+                      "Use /setkey command to set an encryption key.",
+                    parse_mode: "Markdown",
+                  });
+                } else {
+                  await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                    chat_id: chatId,
+                    text:
+                      `🔑 Your current encryption key is: ${env.ENCRYPTION_KEY}\n\n` +
+                      "You can change it with /setkey command.",
                     parse_mode: "Markdown",
                   });
                 }
@@ -352,24 +362,18 @@ export default {
 
               if (!encryptedMessage || !who_won)
               {
-                await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                  chat_id: chatId,
-                  text: "",
-                  parse_mode: "Markdown",
-                });
-
                 throw new Error("Invalid message format!");
               }
 
               // Decode & decrypt input message
-              const decryptedMessage = await decryptMessageExcept(env, encryptedMessage);
+              const decryptedMessage = await AESCrypto.decryptMessageExcept(env.ENCRYPTION_KEY, encryptedMessage);
 
               await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                  chat_id: chatId,
-                  text:
-                    `>>>> before parsing json : ${decryptedMessage}\n`,
-                  parse_mode: "Markdown",
-                });
+                chat_id: chatId,
+                text:
+                  `>>>> before parsing json : ${decryptedMessage}\n`,
+                parse_mode: "Markdown",
+              });
 
               // Parse JSON
               let decryptedMessageJson;
@@ -380,21 +384,22 @@ export default {
               }
 
               await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                  chat_id: chatId,
-                  text:
-                    `>>>> after parsing json : ${decryptedMessageJson}\n`,
-                  parse_mode: "Markdown",
-                });
+                chat_id: chatId,
+                text:
+                  `>>>> after parsing json : ${decryptedMessageJson}\n`,
+                parse_mode: "Markdown",
+              });
 
               // Add input message to message storage after validating.
               messageData.encryptedMessage = encryptedMessage;
               messageData.gameHash = decryptedMessageJson.game_info.final_hash_of_game;
+              messageData.timestamp = decryptedMessageJson.game_info.timestamp;
               messageData.winner = who_won;
 
               await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                 chat_id: chatId,
                 text:
-                  `>>>> typeof gameHash : ${typeof messageData.gameHash}\n`,
+                  `>>>> typeof gameHash : ${typeof messageData.gameHash}`,
                 parse_mode: "Markdown",
               });
 
@@ -461,54 +466,4 @@ async function sendTelegramMessage(botToken, messageData) {
     },
     body: JSON.stringify(messageData),
   });
-}
-
-async function decodeBase64(base64Message) {
-  // try {
-  //   const decoded = atob(base64);
-  //   if (!decoded) {
-  //     throw new Error("Base64 decode failed: input is not valid base64 or is empty.");
-  //   }
-  //   return decoded;
-  // } catch (e) {
-  //   throw new Error("Base64 decode failed: " + e.message);
-  // }
-
-  return atob(base64Message);
-}
-
-async function decryptAES(encryptedData, password) {
-  try {
-    const bytes = CryptoJS.AES.decrypt(encryptedData, password);
-    const originalText = bytes.toString(CryptoJS.enc.Utf8);
-    if (!originalText) {
-      throw new Error("AES decryption failed: result is empty or invalid.");
-    }
-    return originalText;
-  } catch (e) {
-    throw new Error("AES decryption failed: " + e.message);
-  }
-
-  // const bytes = CryptoJS.AES.decrypt(ciphertext, password);
-  // const originalText = bytes.toString(CryptoJS.enc.Utf8);
-  // return originalText;
-}
-
-async function decryptMessageExcept(env, encryptedData) {
-  // 1. Base64 decode
-  const encryptedBuffer = await decodeBase64(encryptedData);
-
-  // 2. Decrypt with AES
-  const decrypted = await decryptAES(encryptedBuffer, env.ENCRYPTION_KEY);
-
-  return decrypted;
-}
-
-async function decryptMessageNoExcept(env, encryptedData) {
-  try {
-    return decryptMessageExcept(env, encryptedData);
-  } catch (error) {
-    console.error("Decryption failed:", error);
-    return "[DECRYPTION FAILED]";
-  }
 }

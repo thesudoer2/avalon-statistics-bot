@@ -12,6 +12,7 @@ preview_id = "KV_PREVIEW_ID" # Optional
 [vars]
 TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
 ADMIN_USER_ID = "ADMIN_USER_ID"
+TZ = "YOUR_TIMEZONE"
 
 [triggers]
 crons = ["0 0 * * *"]  # Daily export
