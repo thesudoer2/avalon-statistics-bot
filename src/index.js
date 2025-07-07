@@ -9,12 +9,12 @@ import {
 } from './storage/kvStorage.js';
 
 import * as AESCrypto from "./AESCrypto.js";
-import * as ExcelHandler from "./ExcelHandler2.js";
+import * as ExcelHandler from "./ExcelHandler.js";
 import * as TimeZone from './Time.js';
 
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const commands_help =
       "*Commands:*\n" +
       "  /start - Show this message\n" +
@@ -45,6 +45,7 @@ export default {
             timestamp: null,
             encryptedMessage: null,
             gameHash: null,
+            gameSeed: null,
             winner: null
           };
 
@@ -195,7 +196,7 @@ export default {
 
               case "/exportnow":
                 if (userId.toString() === env.ADMIN_USER_ID) {
-                  const count = 0; // await exportDecryptedToSheet(env);
+                  await exportDecryptedToSheet(env, ctx);
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
                     text: `✅ Exported ${count} decrypted messages!`,
@@ -394,6 +395,7 @@ export default {
               messageData.encryptedMessage = encryptedMessage;
               messageData.gameHash = decryptedMessageJson.game_info.final_hash_of_game;
               messageData.timestamp = decryptedMessageJson.game_info.timestamp;
+              messageData.gameSeed = decryptedMessageJson.game_info.game_seed;
               messageData.winner = who_won;
 
               await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
@@ -456,6 +458,10 @@ export default {
 
     return new Response("Method not allowed", { status: 405 });
   },
+
+  async scheduled(event, env, ctx) {
+    await ExcelHandler.handleScheduled(env, ctx, event);
+  }
 };
 
 async function sendTelegramMessage(botToken, messageData) {
