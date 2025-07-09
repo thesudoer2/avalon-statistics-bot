@@ -42,7 +42,7 @@ export default {
 
     await setBotCommands(env);
 
-    const default_encryption_key = "YOUR_SECRET_KEY";
+    const default_secret_key = "YOUR_SECRET_KEY";
 
     TimeZone.TimeSettings.GLOBAL_TIMEZONE = env.TZ || 'UTC';
 
@@ -191,10 +191,8 @@ export default {
                     let messageList = [];
                     for (const msg of allMessages) {
                       try {
-                        // if (!msg) continue;
-
                         if (!env.ENCRYPTION_KEY) {
-                          env.ENCRYPTION_KEY = default_encryption_key;
+                          env.ENCRYPTION_KEY = default_secret_key;
                           await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                             chat_id: chatId,
                             text:
@@ -206,7 +204,7 @@ export default {
                         }
 
                         // Decode & decrypt input message
-                        const decryptedMessage = await AESCrypto.decryptMessageNoExcept(env.ENCRYPTION_KEY, msg.encryptedMessage);
+                        const decryptedMessage = await AESCrypto.decryptMessageExcept(env.ENCRYPTION_KEY, msg.encryptedMessage);
 
                         const timestamp = `${TimeZone.timestampToDateTime(msg.timestamp)}`;
                         messageList.push(`=>${decryptedMessage} (${timestamp}) -- winner : ${msg.winner}`);
@@ -288,7 +286,7 @@ export default {
                 break;
 
               case "getkey":
-                if (!env.ENCRYPTION_KEY || env.ENCRYPTION_KEY === default_encryption_key) {
+                if (!env.ENCRYPTION_KEY || env.ENCRYPTION_KEY === default_secret_key) {
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
                     text:
@@ -319,7 +317,7 @@ export default {
           else if (messageText) {
             try {
               if (!env.ENCRYPTION_KEY) {
-                env.ENCRYPTION_KEY = default_encryption_key;
+                env.ENCRYPTION_KEY = default_secret_key;
                 await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                   chat_id: chatId,
                   text:
