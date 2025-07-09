@@ -38,8 +38,6 @@ export default {
       });
     }
 
-    if (!BOT_USERNAME) BOT_USERNAME = await getBotUsername(env);
-
     await setBotCommands(env);
 
     const default_secret_key = "YOUR_SECRET_KEY";
@@ -50,12 +48,17 @@ export default {
       try {
         const update = await request.json();
 
-        if (update.message && update.message.text) {
-          const chatId = update.message.chat.id;
-          const userId = update.message.from.id;
-          const messageText = update.message.text;
+        const message = update.message;
+        let messageText = message.text;
+
+        if (message && messageText) {
+          const chatId = message.chat.id;
+          const chatType = message.chat.type; // "private", "group", "supergroup", etc.
+          const userId = message.from.id;
           const commandRegex = new RegExp(`^\/([a-zA-Z0-9_]+)(@${BOT_USERNAME})?$`);
           const match = messageText.match(commandRegex);
+
+          if (!BOT_USERNAME) BOT_USERNAME = await getBotUsername(env);
 
           // Store message metadata
           const messageData = {
@@ -67,6 +70,40 @@ export default {
             gameSeed: null,
             winner: null
           };
+
+          // Check if the bot is tagged in a group
+          const isTagged = chatType !== 'private' &&
+            (messageText.includes(`@${BOT_USERNAME}`) ||
+            messageText.startsWith(`/`));
+
+          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+            chat_id: chatId,
+            text:
+              `>>>>>>>>>>> is tagged : ${isTagged}`,
+            parse_mode: "Markdown",
+          });
+
+          if (isTagged) {
+            // Remove the bot's username from the message
+            messageText = messageText
+              .replace(new RegExp(`@${BOT_USERNAME}\\b`, 'i'), '') // Remove "@bot_id"
+              .trim();
+
+            await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+              chat_id: chatId,
+              text:
+                `>>>>>>>>>>> cleared message : ${messageText}`,
+              parse_mode: "Markdown",
+            });
+          } else {
+            await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+              chat_id: chatId,
+              text:
+                `>>>>>>>>>>> do nothing`,
+              parse_mode: "Markdown",
+            });
+            return new Response("OK");
+          }
 
           // Handle commands
           if (match) {
@@ -115,8 +152,6 @@ export default {
                   const allMessages = await storageGetAllMessages(env);
 
                   const allKeys = await storageGetAllKeys(env);
-                  const keysCount = allKeys.length;
-
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
                     text:
