@@ -76,32 +76,12 @@ export default {
             (messageText.includes(`@${BOT_USERNAME}`) ||
             messageText.startsWith(`/`));
 
-          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-            chat_id: chatId,
-            text:
-              `>>>>>>>>>>> is tagged : ${isTagged}`,
-            parse_mode: "Markdown",
-          });
-
           if (isTagged) {
             // Remove the bot's username from the message
             messageText = messageText
-              .replace(new RegExp(`@${BOT_USERNAME}\\b`, 'i'), '') // Remove "@bot_id"
+              .replace(new RegExp(`@${BOT_USERNAME}\\b`, 'i'), '')
               .trim();
-
-            await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-              chat_id: chatId,
-              text:
-                `>>>>>>>>>>> cleared message : ${messageText}`,
-              parse_mode: "Markdown",
-            });
           } else {
-            await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-              chat_id: chatId,
-              text:
-                `>>>>>>>>>>> do nothing`,
-              parse_mode: "Markdown",
-            });
             return new Response("OK");
           }
 
@@ -150,14 +130,6 @@ export default {
               case "stats":
                 try {
                   const allMessages = await storageGetAllMessages(env);
-
-                  const allKeys = await storageGetAllKeys(env);
-                  await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                    chat_id: chatId,
-                    text:
-                      `>>>> all keys (${allKeys.length}) : ${allKeys}\n`,
-                    parse_mode: "Markdown",
-                  });
 
                   const messageList = await Promise.all(allMessages.map(msg => {
                     if (msg === null) {
@@ -375,13 +347,6 @@ export default {
               // Decode & decrypt input message
               const decryptedMessage = await AESCrypto.decryptMessageExcept(env.ENCRYPTION_KEY, encryptedMessage);
 
-              await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                chat_id: chatId,
-                text:
-                  `>>>> before parsing json : ${decryptedMessage}\n`,
-                parse_mode: "Markdown",
-              });
-
               // Parse JSON
               let decryptedMessageJson;
               try {
@@ -390,13 +355,6 @@ export default {
                 throw new Error("JSON parse failed: " + e.message);
               }
 
-              await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                chat_id: chatId,
-                text:
-                  `>>>> after parsing json : ${decryptedMessageJson}\n`,
-                parse_mode: "Markdown",
-              });
-
               // Add input message to message storage after validating.
               messageData.encryptedMessage = encryptedMessage;
               messageData.gameHash = decryptedMessageJson.game_info.final_hash_of_game;
@@ -404,21 +362,7 @@ export default {
               messageData.gameSeed = decryptedMessageJson.game_info.game_seed;
               messageData.winner = who_won;
 
-              await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                chat_id: chatId,
-                text:
-                  `>>>> typeof gameHash : ${typeof messageData.gameHash}`,
-                parse_mode: "Markdown",
-              });
-
               const keyExists = await storageHasKey(env, messageData.gameHash);
-
-              await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                chat_id: chatId,
-                text:
-                  `>>>> has key result : ${keyExists}\n`,
-                parse_mode: "Markdown",
-              });
 
               if (keyExists === true) {
                 await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
