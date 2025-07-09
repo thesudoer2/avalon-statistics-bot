@@ -9,21 +9,38 @@ import {
 } from './storage/kvStorage.js';
 
 import * as AESCrypto from "./AESCrypto.js";
-import * as ExcelHandler from "./ExcelHandler.js";
+// import * as ExcelHandler from "./ExcelHandler.js";
 import * as TimeZone from './Time.js';
 
+let BOT_USERNAME;
 
 export default {
   async fetch(request, env, ctx) {
-    const commands_help =
-      "*Commands:*\n" +
-      "  /start - Show this message\n" +
-      "  /help - Show help\n" +
-      "  /stats - Storage stats\n" +
-      "  /sheet - View sheet\n" +
-      "  /exportnow - Export stored data to persistent storage\n" +
-      "  /setkey [key] - Set encryption key (not persistent)\n" +
-      "  /getkey - Get current encryption key";
+    const botCommands = [
+      { command: 'start', description: 'Start the bot' },
+      { command: 'stats', description: 'Show message statistics' },
+      { command: 'help', description: 'Show help menu' },
+      { command: 'exportnow', description: 'Force export data (admin only)' },
+      { command: 'flushdb', description: 'Remove all stored information (admin only)' },
+      { command: 'setkey', description: 'Set password (secret key) for decryption' },
+      { command: 'getkey', description: 'Get current decryption password (decryption secret key)' },
+      { command: 'getdata', description: 'Show stored information in decrypted format (admin only)' },
+    ];
+
+    async function setBotCommands(env) {
+      await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setMyCommands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          commands: botCommands,
+          // scope: { type: 'all_private_chats' }
+        }),
+      });
+    }
+
+    if (!BOT_USERNAME) BOT_USERNAME = await getBotUsername(env);
+
+    await setBotCommands(env);
 
     const default_encryption_key = "YOUR_SECRET_KEY";
 
@@ -33,10 +50,12 @@ export default {
       try {
         const update = await request.json();
 
-        if (update.message) {
+        if (update.message && update.message.text) {
           const chatId = update.message.chat.id;
           const userId = update.message.from.id;
           const messageText = update.message.text;
+          const commandRegex = new RegExp(`^\/([a-zA-Z0-9_]+)(@${BOT_USERNAME})?$`);
+          const match = messageText.match(commandRegex);
 
           // Store message metadata
           const messageData = {
@@ -50,26 +69,34 @@ export default {
           };
 
           // Handle commands
-          if (messageText.startsWith("/")) {
-            const command = messageText.split(" ")[0];
+          if (match) {
+            const command = match[1];
 
             switch (command) {
-              case "/start":
+              case "start": {
+                const helpText = botCommands.map(cmd =>
+                  `/${cmd.command} - ${cmd.description}`
+                ).join('\n');
+
                 await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                   chat_id: chatId,
                   text:
-                    "🔒 Welcome to the encrypted avalon bot!\n\n" +
+                    "🔒 Welcome to the decryption avalon bot!\n\n" +
                     "Send me messages in this format:\n" +
                     "1. Encrypt your message with AES-256-CBC\n" +
                     "2. Encode the result with Base64\n" +
-                    "3. Send the encoded message to me\n\n" +
+                    "3. Send the encoded message to me comma seperated with winner of the game\n\n" +
                     "I will decode and decrypt and store it for you!\n\n" +
-                    commands_help,
+                    `*Commands:*\n${helpText}\n\n`,
                   parse_mode: "Markdown",
-                });
+                })};
                 break;
 
-              case "/help":
+              case "help": {
+                const helpText = botCommands.map(cmd =>
+                  `/${cmd.command} - ${cmd.description}`
+                ).join('\n');
+
                 await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                   chat_id: chatId,
                   text:
@@ -77,14 +104,13 @@ export default {
                     "This bot expects messages that are:\n" +
                     "1. AES-256-CBC encrypted\n" +
                     "2. Base64 encoded\n\n" +
-                    commands_help +
-                    "\n" +
+                    `*Commands:*\n${helpText}\n\n` +
                     "*Note:* The key is not stored persistently and will reset when the worker restarts.",
                   parse_mode: "Markdown",
-                });
+                })};
                 break;
 
-              case "/stats":
+              case "stats":
                 try {
                   const allMessages = await storageGetAllMessages(env);
 
@@ -141,60 +167,7 @@ export default {
                 }
                 break;
 
-              // case "/stats":
-              //   try {
-              //       const allKeys = await storageGetAllKeys(env);
-
-              //       if (allKeys.length != 0) {
-              //         await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-              //           chat_id: chatId,
-              //           text:
-              //             `>>>> all keys (${allKeys.length}) : ${allKeys}\n`,
-              //           parse_mode: "Markdown",
-              //         });
-
-              //         const messages = await Promise.all(
-              //           allKeys.map(async key => {
-              //             const msgData = await storageGetMessage(env, key);
-              //             const decryptedMsg = await decryptMessageNoExcept(env, msgData.encryptedMessage);
-              //             return `- ${msgData.encryptedMessage} (${new Date(msgData.timestamp).toLocaleTimeString()}) -- ${decryptedMsg}`;
-              //           })
-              //         );
-
-              //         await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-              //             chat_id: chatId,
-              //             text:
-              //                 `📊 *Storage Stats:*\n\n` +
-              //                 `- *Total Messages:* ${allKeys.length}\n` +
-              //                 `- *Messages:*\n${messages.join('\n') || "=> No messages"}\n\n` +
-              //                 `- *Last export:* ${env.LAST_EXPORT_TIME || "Never"}`,
-              //             parse_mode: "Markdown",
-              //         });
-              //       } else {
-              //         await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-              //           chat_id: chatId,
-              //           text:
-              //               `📊 *Storage Stats:*\n\n` +
-              //               `- *Total Messages:* 0\n` +
-              //               "- *Messages:*\n" +
-              //               "=> No messages\n\n" +
-              //               `- *Last export:* ${env.LAST_EXPORT_TIME || "Never"}`,
-              //           parse_mode: "Markdown",
-              //         });
-              //       }
-              //   } catch (error) {
-              //       await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-              //           chat_id: chatId,
-              //           text:
-              //             "❌ Failed to fetch stats\n\n" +
-              //             `${error}\n\n` +
-              //             `Message: ${msgData.encryptedMessage}`,
-              //           parse_mode: "Markdown",
-              //       });
-              //   }
-              //   break;
-
-              case "/exportnow":
+              case "exportnow":
                 if (userId.toString() === env.ADMIN_USER_ID) {
                   await exportDecryptedToSheet(env, ctx);
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
@@ -205,20 +178,20 @@ export default {
                 } else {
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
-                    text: "⛔ Admin only command!",
+                    text: "⛔ Admin only!",
                     parse_mode: "Markdown",
                   });
                 }
                 break;
 
-              case "/getdata":
+              case "getdata":
                 try {
                   if (userId.toString() === env.ADMIN_USER_ID) {
                     const allMessages = await storageGetAllMessages(env);
                     let messageList = [];
                     for (const msg of allMessages) {
                       try {
-                        if (!msg) continue;
+                        // if (!msg) continue;
 
                         if (!env.ENCRYPTION_KEY) {
                           env.ENCRYPTION_KEY = default_encryption_key;
@@ -250,7 +223,7 @@ export default {
                   } else {
                     await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                       chat_id: chatId,
-                      text: "⛔ Admin only command!",
+                      text: "⛔ Admin only!",
                       parse_mode: "Markdown",
                     });
                   }
@@ -265,7 +238,7 @@ export default {
                 }
                 break;
 
-              case "/flushdb":
+              case "flushdb":
                 try {
                   if (userId.toString() === env.ADMIN_USER_ID) {
                     const deletedKeys = await storageClearStorage(env);
@@ -279,7 +252,7 @@ export default {
                   } else {
                     await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                       chat_id: chatId,
-                      text: "⛔ Admin only command!",
+                      text: "⛔ Admin only!",
                       parse_mode: "Markdown",
                     });
                   }
@@ -294,7 +267,7 @@ export default {
                 }
                 break;
 
-              case "/setkey":
+              case "setkey":
                 const newKey = messageText.substring(8).trim();
                 if (newKey) {
                   env.ENCRYPTION_KEY = newKey;
@@ -314,7 +287,7 @@ export default {
                 }
                 break;
 
-              case "/getkey":
+              case "getkey":
                 if (!env.ENCRYPTION_KEY || env.ENCRYPTION_KEY === default_encryption_key) {
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
@@ -460,8 +433,8 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
-    await ExcelHandler.handleScheduled(env, ctx, event);
-  }
+    // await ExcelHandler.handleScheduled(env, ctx, event);
+  },
 };
 
 async function sendTelegramMessage(botToken, messageData) {
@@ -472,4 +445,15 @@ async function sendTelegramMessage(botToken, messageData) {
     },
     body: JSON.stringify(messageData),
   });
+}
+
+async function getBotUsername(env) {
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getMe`);
+    const data = await response.json();
+    return data.result?.username || ''; // Fallback to empty string
+  } catch (error) {
+    sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, `Failed to get bot username: ${error}`);
+    return '';
+  }
 }
