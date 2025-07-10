@@ -72,9 +72,9 @@ export default {
           };
 
           // Check if the bot is tagged in a group
-          const isTagged = chatType !== 'private' &&
+          const isTagged = (chatType !== 'private' && (
             (messageText.includes(`@${BOT_USERNAME}`) ||
-            messageText.startsWith(`/`));
+            messageText.startsWith(`/`)))) || (chatType === 'private');
 
           if (isTagged) {
             // Remove the bot's username from the message
