@@ -120,7 +120,7 @@ export default {
 
               case "stats":
                 try {
-                  const allMessages = await Storage.storageGetAllMessages(env);
+                  const allMessages = await Storage.GetAllMessages(env);
 
                   const messageList = await Promise.all(allMessages.map(msg => {
                     if (msg === null) {
@@ -185,7 +185,7 @@ export default {
               case "getdata":
                 try {
                   if (userId.toString() === env.ADMIN_USER_ID) {
-                    const allMessages = await Storage.storageGetAllMessages(env);
+                    const allMessages = await Storage.GetAllMessages(env);
                     let messageList = [];
                     for (const msg of allMessages) {
                       try {
@@ -237,7 +237,7 @@ export default {
               case "flushdb":
                 try {
                   if (userId.toString() === env.ADMIN_USER_ID) {
-                    const deletedKeys = await Storage.storageClearStorage(env);
+                    const deletedKeys = await Storage.ClearStorage(env);
                     await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                       chat_id: chatId,
                       text:
@@ -353,7 +353,7 @@ export default {
               messageData.gameSeed = decryptedMessageJson.game_info.game_seed;
               messageData.winner = who_won;
 
-              const keyExists = await Storage.storageHasKey(env, messageData.gameHash);
+              const keyExists = await Storage.HasKey(env, messageData.gameHash);
 
               if (keyExists === true) {
                 await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
@@ -363,7 +363,7 @@ export default {
                   parse_mode: "Markdown",
                 });
               } else {
-                Storage.storageStoreMessage(env, messageData);
+                Storage.StoreMessage(env, messageData);
 
                 await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                   chat_id: chatId,
