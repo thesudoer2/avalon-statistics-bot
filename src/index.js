@@ -1,16 +1,7 @@
-import {
-  storageStoreMessage,
-  storageGetMessage,
-  storageGetAllMessages,
-  storageGetAllKeys,
-  storageClearStorage,
-  storageGetMessageCount,
-  storageHasKey
-} from './storage/kvStorage.js';
-
+import * as Storage from './storage/kvStorage.js';
 import * as AESCrypto from "./AESCrypto.js";
-// import * as ExcelHandler from "./ExcelHandler.js";
 import * as TimeZone from './Time.js';
+// import * as ExcelHandler from "./ExcelHandler.js";
 
 let BOT_USERNAME;
 
@@ -129,7 +120,7 @@ export default {
 
               case "stats":
                 try {
-                  const allMessages = await storageGetAllMessages(env);
+                  const allMessages = await Storage.storageGetAllMessages(env);
 
                   const messageList = await Promise.all(allMessages.map(msg => {
                     if (msg === null) {
@@ -194,7 +185,7 @@ export default {
               case "getdata":
                 try {
                   if (userId.toString() === env.ADMIN_USER_ID) {
-                    const allMessages = await storageGetAllMessages(env);
+                    const allMessages = await Storage.storageGetAllMessages(env);
                     let messageList = [];
                     for (const msg of allMessages) {
                       try {
@@ -216,7 +207,7 @@ export default {
                         const timestamp = `${TimeZone.timestampToDateTime(msg.timestamp)}`;
                         messageList.push(`=>${decryptedMessage} (${timestamp}) -- winner : ${msg.winner}`);
                       } catch (error) {
-                        throw new Error(`${error}\n\nMessage: ${msg.encryptedMessage}\n\nKey: ${msg.gameHash}`);
+                        throw `${error}\n\nMessage: ${msg.encryptedMessage}\n\nKey: ${msg.gameHash}`;
                       }
                     }
 
@@ -246,7 +237,7 @@ export default {
               case "flushdb":
                 try {
                   if (userId.toString() === env.ADMIN_USER_ID) {
-                    const deletedKeys = await storageClearStorage(env);
+                    const deletedKeys = await Storage.storageClearStorage(env);
                     await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                       chat_id: chatId,
                       text:
@@ -362,7 +353,7 @@ export default {
               messageData.gameSeed = decryptedMessageJson.game_info.game_seed;
               messageData.winner = who_won;
 
-              const keyExists = await storageHasKey(env, messageData.gameHash);
+              const keyExists = await Storage.storageHasKey(env, messageData.gameHash);
 
               if (keyExists === true) {
                 await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
@@ -372,7 +363,7 @@ export default {
                   parse_mode: "Markdown",
                 });
               } else {
-                storageStoreMessage(env, messageData);
+                Storage.storageStoreMessage(env, messageData);
 
                 await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                   chat_id: chatId,
