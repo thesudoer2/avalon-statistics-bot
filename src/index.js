@@ -46,7 +46,8 @@ export default {
           const chatId = message.chat.id;
           const chatType = message.chat.type; // "private", "group", "supergroup", etc.
           const userId = message.from.id;
-          const commandRegex = new RegExp(`^\/([a-zA-Z0-9_]+)(@${BOT_USERNAME})?$`);
+          const commandRegex = new RegExp(`^\/([a-zA-Z0-9_]+)(?:\\s+([a-zA-Z0-9_]+))?(?:\\s*@${BOT_USERNAME})?$`);
+
           const match = messageText.match(commandRegex);
 
           if (!BOT_USERNAME) BOT_USERNAME = await getBotUsername(env);
@@ -97,8 +98,9 @@ export default {
                     "I will decode and decrypt and store it for you!\n\n" +
                     `*Commands:*\n${helpText}\n\n`,
                   parse_mode: "Markdown",
-                })};
+                });
                 break;
+              }
 
               case "help": {
                 const helpText = botCommands.map(cmd =>
@@ -115,10 +117,11 @@ export default {
                     `*Commands:*\n${helpText}\n\n` +
                     "*Note:* The key is not stored persistently and will reset when the worker restarts.",
                   parse_mode: "Markdown",
-                })};
+                })
                 break;
+              }
 
-              case "stats":
+              case "stats": {
                 try {
                   const allMessages = await Storage.GetAllMessages(env);
 
@@ -164,8 +167,9 @@ export default {
                   });
                 }
                 break;
+              }
 
-              case "exportnow":
+              case "exportnow": {
                 if (userId.toString() === env.ADMIN_USER_ID) {
                   await exportDecryptedToSheet(env, ctx);
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
@@ -181,8 +185,9 @@ export default {
                   });
                 }
                 break;
+              }
 
-              case "getdata":
+              case "getdata": {
                 try {
                   if (userId.toString() === env.ADMIN_USER_ID) {
                     const allMessages = await Storage.GetAllMessages(env);
@@ -233,8 +238,9 @@ export default {
                   });
                 }
                 break;
+              }
 
-              case "flushdb":
+              case "flushdb": {
                 try {
                   if (userId.toString() === env.ADMIN_USER_ID) {
                     const deletedKeys = await Storage.ClearStorage(env);
@@ -262,8 +268,9 @@ export default {
                   });
                 }
                 break;
+              }
 
-              case "setkey":
+              case "setkey": {
                 const newKey = messageText.substring(8).trim();
                 if (newKey) {
                   env.ENCRYPTION_KEY = newKey;
@@ -282,8 +289,9 @@ export default {
                   });
                 }
                 break;
+              }
 
-              case "getkey":
+              case "getkey": {
                 if (!env.ENCRYPTION_KEY || env.ENCRYPTION_KEY === default_secret_key) {
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
@@ -302,13 +310,16 @@ export default {
                   });
                 }
                 break;
+              }
 
-              default:
+              default: {
                 await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                   chat_id: chatId,
                   text: "⚠️ Unknown command. Type /help to see available commands.",
                   parse_mode: "Markdown",
                 });
+                break;
+              }
             }
           }
           // Handle encrypted messages
