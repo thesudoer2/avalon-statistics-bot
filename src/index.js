@@ -192,48 +192,87 @@ export default {
                   if (userId.toString() === env.ADMIN_USER_ID) {
                     const allMessages = await Storage.GetAllMessages(env);
                     let messageList = [];
+
                     for (const msg of allMessages) {
+                      if (!msg) {
+                        throw new Error("The database and cache seem to be syncing. Please Wait...\nIf something is wrong, please contact administrator.");
+                      }
+
                       try {
+                        // Set default key if none exists
                         if (!env.ENCRYPTION_KEY) {
                           env.ENCRYPTION_KEY = default_secret_key;
                           await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                             chat_id: chatId,
-                            text:
-                              "🔐 No encryption key set!\n\n" +
-                              "Continue with default encryption key...\n" +
-                              "(if you want to set custom encryption key, use /setkey command)",
+                            text: "🔐 No encryption key set!\n\nUsing default key...\nUse /setkey to change",
                             parse_mode: "Markdown",
                           });
                         }
 
-                        // Decode & decrypt input message
-                        const decryptedMessage = await AESCrypto.decryptMessageExcept(env.ENCRYPTION_KEY, msg.encryptedMessage);
+                        // 1. Decrypt the message
+                        const decryptedMessage = await AESCrypto.decryptMessageNoExcept(
+                          env.ENCRYPTION_KEY,
+                          msg.encryptedMessage
+                        );
 
-                        const timestamp = `${TimeZone.timestampToDateTime(msg.timestamp)}`;
-                        messageList.push(`=>${decryptedMessage} (${timestamp}) -- winner : ${msg.winner}`);
+                        // 2. Parse the decrypted message (which should be JSON)
+                        let parsedInnerMessage;
+                        try {
+                          parsedInnerMessage = JSON.parse(decryptedMessage);
+                        } catch (parseError) {
+                          throw new Error(`Decrypted message is not valid JSON: ${decryptedMessage}`);
+                        }
+
+                        // 3. Create a modified message object
+                        const modifiedMessage = {
+                          ...msg,
+                          encryptedMessage: parsedInnerMessage
+                        };
+
+                        // 4. Beautify the entire structure with proper indentation (2 spaces)
+                        const beautifiedMessage = JSON.stringify(modifiedMessage, (key, value) => { return value; }, 2);
+
+                        // 5. Format the output line
+                        const timestamp = TimeZone.timestampToDateTime(msg.timestamp);
+                        messageList.push(`📅 ${timestamp}\n🏆 Winner: ${msg.winner}\n\`\`\`json\n${beautifiedMessage}\n\`\`\``);
                       } catch (error) {
-                        throw `${error}\n\nMessage: ${msg.encryptedMessage}\n\nKey: ${msg.gameHash}`;
+                        // Fallback showing original message with error
+                        const fallbackMessage = JSON.stringify({...msg, error: `Decryption failed: ${error.message || error}`}, null, 2);
+                        messageList.push(`⚠️ DECRYPTION FAILED\n\`\`\`json\n${fallbackMessage}\n\`\`\``);
                       }
                     }
 
-                    await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                      chat_id: chatId,
-                      text: `✉️ Messages:\n${messageList.join("\n")}`,
-                      parse_mode: "Markdown",
-                    });
+                    // Send output (split if too long)
+                    if (messageList.length === 0) {
+                      await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                        chat_id: chatId,
+                        text: "No messages found in storage",
+                        parse_mode: "Markdown",
+                      });
+                      break;
+                    }
+
+                    // Send in chunks if too large
+                    const chunkSize = 3; // Messages per chunk
+                    for (let i = 0; i < messageList.length; i += chunkSize) {
+                      const chunk = messageList.slice(i, i + chunkSize);
+                      await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                        chat_id: chatId,
+                        text: `📊 Messages ${messageList.length}:\n${chunk.join("\n\n")}`,
+                        parse_mode: "Markdown",
+                      });
+                    }
                   } else {
                     await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                       chat_id: chatId,
-                      text: "⛔ Admin only!",
+                      text: "⛔ Admin only command!",
                       parse_mode: "Markdown",
                     });
                   }
                 } catch (error) {
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
-                    text:
-                      "❌ Failed to process messages!\n\n" +
-                      error,
+                    text: `❌ Error processing messages:\n\n${error.message || error}`,
                     parse_mode: "Markdown",
                   });
                 }
@@ -417,13 +456,17 @@ export default {
 };
 
 async function sendTelegramMessage(botToken, messageData) {
-  return fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+  const resp = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(messageData),
   });
+  if (resp.status !== 200) {
+    const text = await resp.text();
+    console.log(resp, text);
+  }
 }
 
 async function getBotUsername(env) {
