@@ -125,22 +125,19 @@ export default {
                 try {
                   const allMessages = await Storage.GetAllMessages(env);
 
-                  const messageList = await Promise.all(allMessages.map(msg => {
+                  let messageList = [];
+
+                  await Promise.all(allMessages.map(msg => {
                     if (msg === null) {
                       throw new Error("The database and cache seem to be syncing. Please Wait ...\nIf something is wrong, please contact administrator.");
                     }
 
                     try {
                       if (msg.encryptedMessage) {
-                        let finalString = `=>${msg.encryptedMessage}`;
-
-                        if (msg.timestamp) {
-                          finalString += ` (${TimeZone.timestampToDateTime(msg.timestamp)})`;
-                        }
-
-                        return finalString;
+                        const timestamp = TimeZone.timestampToDateTime(msg.timestamp);
+                        messageList.push(`📅 ${timestamp}\n🏆 Winner: ${msg.winner}\n🔐 Encrypted Message:\n\`\`\`\n${msg.encryptedMessage}\n\`\`\``);
                       } else {
-                        return "Nothing!";
+                        messageList.push("Nothing!");
                       }
                     } catch (error) {
                       throw new Error(`${error}\n\nMessage: ${msg.encryptedMessage}\n\nKey: ${msg.gameHash}`);
@@ -150,10 +147,8 @@ export default {
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
                     text:
-                      `📊 *Storage Stats:*\n\n` +
-                      `- *Encrypted messages:* ${allMessages.length}\n` +
-                      // `- *Messages:*\n${messageList || "=> No messages"}\n\n` +
-                      `- *Messages:*\n${messageList.join('\n') || "=> No messages"}\n\n` +
+                      `*📊 Messages (${messageList.length}):\n*` +
+                      `${messageList.join('\n') || "=> No messages"}\n\n` +
                       `- *Last export:* ${env.LAST_EXPORT_TIME || "Never"}`,
                     parse_mode: "Markdown",
                   });
@@ -258,7 +253,7 @@ export default {
                       const chunk = messageList.slice(i, i + chunkSize);
                       await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                         chat_id: chatId,
-                        text: `📊 Messages ${messageList.length}:\n${chunk.join("\n\n")}`,
+                        text: `📊 *Messages (${messageList.length}):*\n${chunk.join("\n\n")}`,
                         parse_mode: "Markdown",
                       });
                     }
