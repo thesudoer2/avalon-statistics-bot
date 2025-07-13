@@ -299,7 +299,7 @@ export default {
                             TimeZone.timestampToDateTime(decryptedMessageJson.game_info.timestamp),
                             decryptedMessageJson.game_info.game_seed,
                             message.winner,
-                            message.players.length,
+                            decryptedMessageJson.players.length,
                             ...headers.slice(2).map(h => decryptedMessageJson.players[h] || '')
                           ];
 
