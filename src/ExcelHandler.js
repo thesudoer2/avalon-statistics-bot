@@ -1,74 +1,77 @@
-﻿const { google } = require('googleapis');
-
-import * as TimeZone from './Time.js';
+﻿import * as TimeZone from './Time.js';
 import * as AESCrypto from "./AESCrypto.js";
+import * as GoogleAuth from './GoogleAuth.js';
 
-// Configure authentication - you'll need to set this up
-const auth = new google.auth.GoogleAuth({
-  keyFile: 'sheets-api-project-465201-64087f908ace.json',
-  scopes: 'https://www.googleapis.com/auth/spreadsheets',
-});
 
-// The ID of your public Google Sheet
-// const spreadsheetId = 'YOUR_SPREADSHEET_ID
-const spreadsheetId = 'GOOGLE_SPREED_SHEET_ID';
-
-async function addToSheet(jsonData) {
+export async function addToSheet(jsonData) {
   try {
-    // Create client instance for auth
-    const client = await auth.getClient();
+    const spreadsheetId = 'GOOGLE_SPREED_SHEET_ID';
 
-    // Instance of Google Sheets API
-    const googleSheets = google.sheets({ version: "v4", auth: client });
+    // Get JWT token
+    const serviceAccount = require('./sheets-api-project-465201-64087f908ace.json');
+    const jwtToken = await GoogleAuth.getJwtToken(serviceAccount);
 
-    // First, get the current sheet structure to find player columns
-    const sheetInfo = await googleSheets.spreadsheets.get({
-      spreadsheetId,
-    });
+    // Exchange JWT for access token
+    const accessToken = await GoogleAuth.exchangeJwtForAccessToken(jwtToken);
 
-    // Assuming first sheet and first row contains headers
-    const sheetName = sheetInfo.data.sheets[0].properties.title;
-    const headerRow = await googleSheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: `${sheetName}!1:1`,
-    });
+    // 1. Get sheet info to find headers
+    const sheetInfo = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      }
+    );
 
-    const headers = headerRow.data.values[0];
+    const sheetData = await sheetInfo.json();
+    const sheetName = sheetData.sheets[0].properties.title;
 
-    // Prepare the new row data
-    const newRow = [];
+    // 2. Get headers
+    const headersRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${sheetName}!1:1`,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      }
+    );
 
-    // Add date and time (from timestamp)
-    newRow.push(TimeZone.timestampToDateTime(jsonData.game_info.timestamp));
+    const headersData = await headersRes.json();
+    const headers = headersData.values[0];
 
-    // Add game seed
-    newRow.push(jsonData.game_info.game_seed);
+    // 3. Prepare row data
+    const row = [
+      TimeZone.timestampToDateTime(jsonData.game_info.timestamp),
+      jsonData.game_info.game_seed,
+      ...headers.slice(2).map(h => jsonData.players[h] || '')
+    ];
 
-    // Add player roles in their respective columns
-    for (let i = 2; i < headers.length; i++) {
-      const playerName = headers[i];
-      newRow.push(jsonData.players[playerName] || ''); // Empty if player not in this game
-    }
+    // 4. Append row
+    const resp = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${sheetName}!A:Z:append`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          values: [row],
+          majorDimension: "ROWS"
+        })
+      }
+    );
 
-    // Append the new row
-    await googleSheets.spreadsheets.values.append({
-      spreadsheetId,
-      range: `${sheetName}!A:Z`, // Adjust if you have more columns
-      valueInputOption: "USER_ENTERED",
-      resource: {
-        values: [newRow],
-      },
-    });
-
-    console.log('Data added successfully!');
+    return resp.ok;
   } catch (err) {
-    console.error('Error:', err);
+    return false;
   }
 }
 
 export async function handleScheduled(env, ctx, event) {
   const allMessages = await storageGetAllMessages(env);
-  for (message of allMessages) {
+  for (const message of allMessages) {
     if (message.encryptedMessage && message.gameHash && message.timestamp) {
       try {
         // Decode & decrypt input message
@@ -76,7 +79,7 @@ export async function handleScheduled(env, ctx, event) {
         const decryptedMessageJson = JSON.parse(decryptedMessage);
 
         // Add to Google Sheet
-        await addToSheet(decryptedMessageJson);
+        const successed = await addToSheet(decryptedMessageJson);
       } catch (error) {
         console.error(`Error processing message ${message.gameHash}:`, error);
       }
