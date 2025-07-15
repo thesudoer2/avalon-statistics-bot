@@ -67,7 +67,7 @@ export default {
           // Check if the bot is tagged in a group
           const isTagged = (chatType !== 'private' && (
             (messageText.includes(`@${BOT_USERNAME}`) ||
-            messageText.startsWith(`/`)))) || (chatType === 'private');
+              messageText.startsWith(`/`)))) || (chatType === 'private');
 
           if (isTagged) {
             // Remove the bot's username from the message
@@ -168,204 +168,21 @@ export default {
               case "exportnow": {
                 try {
                   if (userId.toString() === env.ADMIN_USER_ID) {
-                    await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                      chat_id: chatId,
-                      text:
-                        `>>>> before calling export!`,
-                      parse_mode: "Markdown",
-                    });
-
-                    // const result = await exportDecryptedToSheet(env, ctx);
-
                     const allMessages = await Storage.GetAllMessages(env);
                     for (const message of allMessages) {
-                      if (message.encryptedMessage && message.gameHash && message.timestamp) {
-                        try {
-                          // Decode & decrypt input message
-                          const decryptedMessage = await AESCrypto.decryptMessageNoExcept(default_secret_key, message.encryptedMessage);
-                          const decryptedMessageJson = JSON.parse(decryptedMessage);
+                      if (!message)
+                        throw new Error("The database and cache seem to be syncing. Please wait...\nIf something is wrong, please contact the administrator.");
 
-                          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                            chat_id: chatId,
-                            text:
-                              `>>>> decrypted message: \n\`\`\`json\n${decryptedMessage}\n\`\`\`\n` +
-                              `\n\`\`\`json\n${JSON.stringify(decryptedMessageJson)}\n\`\`\`\n`,
-                            parse_mode: "Markdown",
-                          });
-
-                          //////////////////// Add to Google Sheet
-                          const spreadsheetId = 'GOOGLE_SPREED_SHEET_ID';
-
-                          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                            chat_id: chatId,
-                            text:
-                              `>>>>>>> start adding to google sheet`,
-                            parse_mode: "Markdown",
-                          });
-
-                          // Get JWT token
-                          const serviceAccount = require('./sheets-api-project-465201-64087f908ace.json');
-                          const jwtToken = await GoogleAuth.getJwtToken(serviceAccount);
-
-                          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                            chat_id: chatId,
-                            text:
-                              `>>>>>>> after jwtToken`,
-                            parse_mode: "Markdown",
-                          });
-
-                          // Exchange JWT for access token
-                          const accessToken = await GoogleAuth.exchangeJwtForAccessToken(jwtToken);
-
-                          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                            chat_id: chatId,
-                            text:
-                              `>>>>>>> after getting access token : \n\`\`\`\n${accessToken || undefined}\n\`\`\`\n`,
-                            parse_mode: "Markdown",
-                          });
-
-                          // 1. Get sheet info to find headers
-                          const sheetInfo = await fetch(
-                            `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`,
-                            {
-                              headers: {
-                                'Authorization': `Bearer ${accessToken}`
-                              }
-                            }
-                          );
-
-                          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                            chat_id: chatId,
-                            text:
-                              `>>>>>>> after fetching sheetInfo`,
-                            parse_mode: "Markdown",
-                          });
-
-                          if (!sheetInfo || sheetInfo.status !== 200) {
-                            throw new Error(`fetching sheet information, error code: ${sheetInfo?.status || "xxx"}`);
-                          }
-
-                          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                            chat_id: chatId,
-                            text:
-                              `>>>>>>> before getting json from sheetInfo`,
-                            parse_mode: "Markdown",
-                          });
-
-                          const sheetData = await sheetInfo.json();
-
-                          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                            chat_id: chatId,
-                            text:
-                              `>>>>>>> sheetData : \n\`\`\`\n${JSON.stringify(sheetData) || undefined}\n\`\`\`\n`,
-                            parse_mode: "Markdown",
-                          });
-
-                          const sheetName = sheetData.sheets[0].properties.title;
-
-                          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                            chat_id: chatId,
-                            text:
-                              `>>>>>>> before fetching headersRes`,
-                            parse_mode: "Markdown",
-                          });
-
-                          // 2. Get headers
-                          const headersRes = await fetch(
-                            `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${sheetName}!1:1`,
-                            {
-                              headers: {
-                                'Authorization': `Bearer ${accessToken}`
-                              }
-                            }
-                          );
-
-                          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                            chat_id: chatId,
-                            text:
-                              `>>>>>>> after fetching headersRes`,
-                            parse_mode: "Markdown",
-                          });
-
-                          if (headersRes.status !== 200) {
-                            throw new Error("fetching sheet header");
-                          }
-
-                          const headersData = await headersRes.json();
-                          const headers = headersData.values[0];
-
-                          // 3. Prepare row data
-                          const row = [
-                            TimeZone.timestampToDateTime(decryptedMessageJson.game_info.timestamp),
-                            decryptedMessageJson.game_info.game_seed,
-                            message.winner,
-                            decryptedMessageJson.players.length,
-                            ...headers.slice(2).map(h => decryptedMessageJson.players[h] || '')
-                          ];
-
-                          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                            chat_id: chatId,
-                            text:
-                              `>>>>>>> row :\n\`\`\`\n${row.join(",")}\n\`\`\`\n`,
-                            parse_mode: "Markdown",
-                          });
-
-                          // 4. Append row
-                          const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${sheetName}!A:Z:append?valueInputOption=USER_ENTERED`;
-                          const resp = await fetch(
-                            // `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${sheetName}!A:Z:append`,
-                            appendUrl,
-                            {
-                              method: 'POST',
-                              headers: {
-                                'Authorization': `Bearer ${accessToken}`,
-                                'Content-Type': 'application/json'
-                              },
-                              body: JSON.stringify({
-                                values: [row],
-                                majorDimension: "ROWS"
-                              })
-                            }
-                          );
-
-                          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                            chat_id: chatId,
-                            text:
-                              `>>>>>>> after posting row`,
-                            parse_mode: "Markdown",
-                          });
-
-                          // if (resp.status !== 200) {
-                          //   throw new Error("posting row");
-                          // }
-
-                          // await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                          //   chat_id: chatId,
-                          //   text:
-                          //     `>>>>>>> posting row status : ${resp.status}`,
-                          //   parse_mode: "Markdown",
-                          // });
-                        } catch (error) {
-                          throw `Error processing message ${message.gameHash}:\n\n${error || error.message}`;
-                        }
-                      }
+                      await ExcelHandler.addToSheet(message)
                     }
-                    // ctx.waitUntil(Promise.resolve());
-
-                    await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
-                      chat_id: chatId,
-                      text:
-                        `>>>> after calling export`,
-                      parse_mode: "Markdown",
-                    });
-
                     await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                       chat_id: chatId,
                       text:
                         `✅ Exported decrypted messages!\n`, // +
-                        // JSON.stringify(result),
+                      // JSON.stringify(result),
                       parse_mode: "Markdown",
                     });
+                    // ctx.waitUntil(Promise.resolve());
                   } else {
                     await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                       chat_id: chatId,
@@ -433,7 +250,7 @@ export default {
                         messageList.push(`📅 ${timestamp}\n🏆 Winner: ${msg.winner}\n\`\`\`json\n${beautifiedMessage}\n\`\`\``);
                       } catch (error) {
                         // Fallback showing original message with error
-                        const fallbackMessage = JSON.stringify({...msg, error: `Decryption failed: ${error.message || error}`}, null, 2);
+                        const fallbackMessage = JSON.stringify({ ...msg, error: `Decryption failed: ${error.message || error}` }, null, 2);
                         messageList.push(`⚠️ DECRYPTION FAILED\n\`\`\`json\n${fallbackMessage}\n\`\`\``);
                       }
                     }
@@ -576,8 +393,7 @@ export default {
               const encryptedMessage = messageText.split(",")[0].trim();
               const who_won = messageText.split(",")[1].trim();
 
-              if (!encryptedMessage || !who_won)
-              {
+              if (!encryptedMessage || !who_won) {
                 throw new Error("Invalid message format!");
               }
 
@@ -585,18 +401,18 @@ export default {
               const decryptedMessage = await AESCrypto.decryptMessageExcept(env.ENCRYPTION_KEY, encryptedMessage);
 
               // Parse JSON
-              let decryptedMessageJson;
+              let decryptedData;
               try {
-                decryptedMessageJson = JSON.parse(decryptedMessage);
+                decryptedData = JSON.parse(decryptedMessage);
               } catch (e) {
                 throw new Error("JSON parse failed: " + e.message);
               }
 
               // Add input message to message storage after validating.
               messageData.encryptedMessage = encryptedMessage;
-              messageData.gameHash = decryptedMessageJson.game_info.final_hash_of_game;
-              messageData.timestamp = decryptedMessageJson.game_info.timestamp;
-              messageData.gameSeed = decryptedMessageJson.game_info.game_seed;
+              messageData.gameHash = decryptedData.game_info.final_hash_of_game;
+              messageData.timestamp = decryptedData.game_info.timestamp;
+              messageData.gameSeed = decryptedData.game_info.game_seed;
               messageData.winner = who_won;
 
               const keyExists = await Storage.HasKey(env, messageData.gameHash);
@@ -676,25 +492,6 @@ async function getBotUsername(env) {
   }
 }
 
-async function handleScheduled(env, ctx, event) {
-  const allMessages = await Storage.GetAllMessages(env);
-  for (const message of allMessages) {
-    if (message.encryptedMessage && message.gameHash && message.timestamp) {
-      try {
-        // Decode & decrypt input message
-        const decryptedMessage = await AESCrypto.decryptMessageNoExcept(env.ENCRYPTION_KEY, message.encryptedMessage);
-        const decryptedMessageJson = JSON.parse(decryptedMessage);
-
-        // Add to Google Sheet
-        const successed = await addToSheet(decryptedMessageJson);
-      } catch (error) {
-        console.error(`Error processing message ${message.gameHash}:`, error);
-      }
-    }
-  }
-  ctx.waitUntil(Promise.resolve());
-  return new Response("Scheduled task completed", { status: 200 });
-}
 
 // async function exportDecryptedToSheet(env, ctx) {
 //   return await handleScheduled(env, ctx);

@@ -5,7 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "CLOUDFLARE_API_TOKEN='YOUR_CLOUDFLARE_API_TOKEN' wrangler deploy"
   },
   "dependencies": {
     "crypto-js": "^4.2.0",

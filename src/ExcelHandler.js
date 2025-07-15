@@ -1,76 +1,85 @@
 ﻿import * as TimeZone from './Time.js';
 import * as AESCrypto from "./AESCrypto.js";
 import * as GoogleAuth from './GoogleAuth.js';
+import serviceAccount from './sheets-api-project-465201-64087f908ace.json';
 
+const spreadsheetId = 'GOOGLE_SPREED_SHEET_ID';
+const default_secret_key = "YOUR_SECRET_KEY";
 
-export async function addToSheet(jsonData) {
+export async function addToSheet(message) {
+  const { encryptedMessage, gameHash, timestamp } = message;
+  if (!encryptedMessage || !gameHash || !timestamp) return false;
+
   try {
-    const spreadsheetId = 'GOOGLE_SPREED_SHEET_ID';
+    // Step 1: Decrypt message
+    const decryptedText = await AESCrypto.decryptMessageNoExcept(default_secret_key, encryptedMessage);
+    const decryptedData = JSON.parse(decryptedText);
 
-    // Get JWT token
-    const serviceAccount = require('./sheets-api-project-465201-64087f908ace.json');
+    // Step 2: Authenticate with Google Sheets API
     const jwtToken = await GoogleAuth.getJwtToken(serviceAccount);
-
-    // Exchange JWT for access token
     const accessToken = await GoogleAuth.exchangeJwtForAccessToken(jwtToken);
 
-    // 1. Get sheet info to find headers
-    const sheetInfo = await fetch(
+    const headers = {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    };
+
+    // Step 3: Fetch sheet metadata
+    const sheetInfoRes = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
-        }
-      }
+      { headers }
     );
 
-    const sheetData = await sheetInfo.json();
+    if (!sheetInfoRes.ok)
+      throw new Error(`Failed to fetch sheet info. Status: ${sheetInfoRes.status}`);
+
+    const sheetData = await sheetInfoRes.json();
     const sheetName = sheetData.sheets[0].properties.title;
 
-    // 2. Get headers
+    // Step 4: Fetch sheet headers
     const headersRes = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${sheetName}!1:1`,
-      {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
-        }
-      }
+      { headers }
     );
 
-    const headersData = await headersRes.json();
-    const headers = headersData.values[0];
+    if (!headersRes.ok)
+      throw new Error(`Failed to fetch sheet headers. Status: ${headersRes.status}`);
 
-    // 3. Prepare row data
+    const headerValues = (await headersRes.json()).values[0];
+
+    // Step 5: Prepare data row
+    const { game_info, players } = decryptedData;
     const row = [
-      TimeZone.timestampToDateTime(jsonData.game_info.timestamp),
-      jsonData.game_info.game_seed,
-      ...headers.slice(2).map(h => jsonData.players[h] || '')
+      TimeZone.timestampToDateTime(game_info.timestamp),
+      game_info.game_seed,
+      message.winner,
+      players.length,
+      ...headerValues.slice(2).map(h => players[h] || '')
     ];
 
-    // 4. Append row
-    const resp = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${sheetName}!A:Z:append`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          values: [row],
-          majorDimension: "ROWS"
-        })
-      }
-    );
+    // Step 6: Append data row to sheet
+    const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${sheetName}!A:Z:append?valueInputOption=USER_ENTERED`;
 
-    return resp.ok;
-  } catch (err) {
-    return false;
+    const appendRes = await fetch(appendUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        values: [row],
+        majorDimension: 'ROWS'
+      })
+    });
+
+    if (!appendRes.ok)
+      throw new Error(`Failed to append row. Status: ${appendRes.status}`);
+
+    return true
+  } catch (error) {
+    throw new Error(`Error processing message ${gameHash}:\n\n${error.message || error}`);
   }
 }
 
 export async function handleScheduled(env, ctx, event) {
-  const allMessages = await storageGetAllMessages(env);
+  const allMessages = await Storage.GetAllMessages(env);
   for (const message of allMessages) {
     if (message.encryptedMessage && message.gameHash && message.timestamp) {
       try {
