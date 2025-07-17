@@ -457,6 +457,13 @@ export default {
                 parse_mode: "Markdown",
               });
             }
+          } else {
+            await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+              chat_id: chatId,
+              text:
+                "❌ You mentioned me but you didn't entered any message!",
+              parse_mode: "Markdown",
+            });
           }
         }
 
