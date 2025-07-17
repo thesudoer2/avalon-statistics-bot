@@ -51,10 +51,10 @@ export async function addToSheet(message) {
     const { game_info, players } = decryptedData;
     const row = [
       TimeZone.timestampToDateTime(game_info.timestamp),
-      game_info.game_seed,
       message.winner,
-      players.length,
-      ...headerValues.slice(2).map(h => players[h] || '')
+      game_info.game_seed,
+      Object.keys(players).length,
+      ...headerValues.slice(4).map(h => players[h] || '')
     ];
 
     // Step 6: Append data row to sheet
