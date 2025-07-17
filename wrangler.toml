@@ -13,6 +13,7 @@ preview_id = "KV_PREVIEW_ID" # Optional (to separate develop and production data
 TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
 ADMIN_USER_ID = "ADMIN_USER_ID"
 TZ = "YOUR_TIMEZONE" # Optional (e.g. "Asia/Tehran" / default: "UTC")
+NOTIFICATION_CHAT_ID="THE_CHAT_YOU_WANT_BOT_SEND_NOTIFICATION_TO_IT"
 
 [triggers]
 crons = ["0 0 * * *"]  # Daily export
