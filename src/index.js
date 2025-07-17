@@ -31,7 +31,7 @@ export default {
 
     await setBotCommands(env);
 
-    const defaultSecretKey = "YOUR_SECRET_KEY"; // Suggestion: string with 32 character length (like: TixhYkG3jjTiPQCvJqKphorY9aqAiiiI)
+    const defaultSecretKey = env.DEFAULT_SECRET_KEY;
 
     TimeZone.TimeSettings.GLOBAL_TIMEZONE = env.TZ || 'UTC';
 
@@ -50,7 +50,7 @@ export default {
 
           const match = messageText.match(commandRegex);
 
-          if (!BOT_USERNAME) BOT_USERNAME = await getBotUsername(env);
+          if (!BOT_USERNAME) BOT_USERNAME = await getBotUsername(env.TELEGRAM_BOT_TOKEN);
 
           // Store message metadata
           const messageData = {
@@ -149,7 +149,7 @@ export default {
                     text:
                       `*📊 Messages (${messageList.length}):\n*` +
                       `${messageList.join('\n') || "=> No messages"}\n\n` +
-                      `- *Last export:* ${env.LAST_EXPORT_TIME || "Never"}`,
+                      `- *Last export:* ${env?.LAST_EXPORT_TIME || "Never"}`,
                     parse_mode: "Markdown",
                   });
                 } catch (error) {
@@ -167,12 +167,22 @@ export default {
               case "exportnow": {
                 try {
                   if (userId.toString() === env.ADMIN_USER_ID) {
+                    // Set default key if none exists
+                    if (!env.SECRET_KEY) {
+                      env.SECRET_KEY = defaultSecretKey;
+                      await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
+                        chat_id: chatId,
+                        text: "🔐 No encryption key set!\n\nUsing default key...\nUse /setkey to change",
+                        parse_mode: "Markdown",
+                      });
+                    }
+
                     const allMessages = await Storage.GetAllMessages(env);
                     for (const message of allMessages) {
                       if (!message)
                         throw new Error("The database and cache seem to be syncing. Please wait...\nIf something is wrong, please contact the administrator.");
 
-                      await ExcelHandler.addToSheet(message)
+                      await ExcelHandler.addToSheet(env, message)
                     }
                     await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                       chat_id: chatId,
@@ -211,8 +221,8 @@ export default {
 
                       try {
                         // Set default key if none exists
-                        if (!env.ENCRYPTION_KEY) {
-                          env.ENCRYPTION_KEY = defaultSecretKey;
+                        if (!env.SECRET_KEY) {
+                          env.SECRET_KEY = defaultSecretKey;
                           await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                             chat_id: chatId,
                             text: "🔐 No encryption key set!\n\nUsing default key...\nUse /setkey to change",
@@ -222,7 +232,7 @@ export default {
 
                         // 1. Decrypt the message
                         const decryptedMessage = await AESCrypto.decryptMessageNoExcept(
-                          env.ENCRYPTION_KEY,
+                          env.SECRET_KEY,
                           msg.encryptedMessage
                         );
 
@@ -323,7 +333,7 @@ export default {
               case "setkey": {
                 const newKey = messageText.substring(8).trim();
                 if (newKey) {
-                  env.ENCRYPTION_KEY = newKey;
+                  env.SECRET_KEY = newKey;
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
                     text:
@@ -342,7 +352,7 @@ export default {
               }
 
               case "getkey": {
-                if (!env.ENCRYPTION_KEY || env.ENCRYPTION_KEY === defaultSecretKey) {
+                if (!env.SECRET_KEY || env.SECRET_KEY === defaultSecretKey) {
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
                     text:
@@ -354,7 +364,7 @@ export default {
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
                     text:
-                      `🔑 Your current encryption key is: ${env.ENCRYPTION_KEY}\n\n` +
+                      `🔑 Your current encryption key is: ${env.SECRET_KEY}\n\n` +
                       "You can change it with /setkey command.",
                     parse_mode: "Markdown",
                   });
@@ -375,8 +385,8 @@ export default {
           // Handle encrypted messages
           else if (messageText) {
             try {
-              if (!env.ENCRYPTION_KEY) {
-                env.ENCRYPTION_KEY = defaultSecretKey;
+              if (!env.SECRET_KEY) {
+                env.SECRET_KEY = defaultSecretKey;
                 await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                   chat_id: chatId,
                   text:
@@ -388,15 +398,14 @@ export default {
               }
 
               // Read user input
-              const encryptedMessage = messageText.split(",")[0].trim();
-              const who_won = messageText.split(",")[1].trim();
+              const encryptedMessage = messageText;
 
-              if (!encryptedMessage || !who_won) {
+              if (!encryptedMessage) {
                 throw new Error("Invalid message format!");
               }
 
               // Decode & decrypt input message
-              const decryptedMessage = await AESCrypto.decryptMessageExcept(env.ENCRYPTION_KEY, encryptedMessage);
+              const decryptedMessage = await AESCrypto.decryptMessageExcept(env.SECRET_KEY, encryptedMessage);
 
               // Parse JSON
               let decryptedData;
@@ -407,11 +416,12 @@ export default {
               }
 
               // Add input message to message storage after validating.
+              const {game_info} = decryptedData;
               messageData.encryptedMessage = encryptedMessage;
-              messageData.gameHash = decryptedData.game_info.final_hash_of_game;
-              messageData.timestamp = decryptedData.game_info.timestamp;
-              messageData.gameSeed = decryptedData.game_info.game_seed;
-              messageData.winner = who_won;
+              messageData.gameHash = game_info.final_hash_of_game;
+              messageData.timestamp = game_info.timestamp;
+              messageData.gameSeed = game_info.game_seed;
+              messageData.winner = game_info.winner;
 
               const keyExists = await Storage.HasKey(env, messageData.gameHash);
 
@@ -479,13 +489,13 @@ async function sendTelegramMessage(botToken, messageData) {
   }
 }
 
-async function getBotUsername(env) {
+async function getBotUsername(botToken) {
   try {
-    const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getMe`);
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
     const data = await response.json();
     return data.result?.username || ''; // Fallback to empty string
   } catch (error) {
-    sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, `Failed to get bot username: ${error}`);
+    sendTelegramMessage(botToken, `Failed to get bot username: ${error}`);
     return '';
   }
 }

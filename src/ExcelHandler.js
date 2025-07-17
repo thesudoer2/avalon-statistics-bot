@@ -3,16 +3,16 @@ import * as AESCrypto from "./AESCrypto.js";
 import * as GoogleAuth from './GoogleAuth.js';
 import serviceAccount from '../res/sheets-api-project.json';
 
-const spreadsheetId = 'GOOGLE_SPREED_SHEET_ID';
-const default_secret_key = "YOUR_SECRET_KEY";
-
-export async function addToSheet(message) {
+export async function addToSheet(env, message) {
   const { encryptedMessage, gameHash, timestamp } = message;
   if (!encryptedMessage || !gameHash || !timestamp) return false;
 
+  const spreadsheetId = env.SPREAD_SHEET_ID;
+  const secretKey = env.SECRET_KEY;
+
   try {
     // Step 1: Decrypt message
-    const decryptedText = await AESCrypto.decryptMessageNoExcept(default_secret_key, encryptedMessage);
+    const decryptedText = await AESCrypto.decryptMessageNoExcept(secretKey, encryptedMessage);
     const decryptedData = JSON.parse(decryptedText);
 
     // Step 2: Authenticate with Google Sheets API
@@ -88,7 +88,7 @@ export async function handleScheduled(env, ctx, event) {
         const decryptedMessageJson = JSON.parse(decryptedMessage);
 
         // Add to Google Sheet
-        const successed = await addToSheet(decryptedMessageJson);
+        const successed = await addToSheet(env, decryptedMessageJson);
       } catch (error) {
         console.error(`Error processing message ${message.gameHash}:`, error);
       }
