@@ -182,15 +182,18 @@ export default {
                       if (!message)
                         throw new Error("The database and cache seem to be syncing. Please wait...\nIf something is wrong, please contact the administrator.");
 
-                      await ExcelHandler.addToSheet(env, message)
+                      await ExcelHandler.addToSheet(env, message);
                     }
+
+                    // Flush database after writing data to sheet
+                    await Storage.ClearStorage(env);
+
                     await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                       chat_id: chatId,
                       text:
                         `✅ Exported decrypted messages!\n`,
                       parse_mode: "Markdown",
                     });
-                    // ctx.waitUntil(Promise.resolve());
                   } else {
                     await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                       chat_id: chatId,
