@@ -2,7 +2,6 @@ import * as Storage from './storage/kvStorage.js';
 import * as AESCrypto from "./AESCrypto.js";
 import * as TimeZone from './Time.js';
 import * as ExcelHandler from "./ExcelHandler.js";
-import * as GoogleAuth from './GoogleAuth.js';
 
 let BOT_USERNAME;
 
@@ -32,7 +31,7 @@ export default {
 
     await setBotCommands(env);
 
-    const default_secret_key = "YOUR_SECRET_KEY";
+    const defaultSecretKey = "YOUR_SECRET_KEY"; // Suggestion: string with 32 character length (like: TixhYkG3jjTiPQCvJqKphorY9aqAiiiI)
 
     TimeZone.TimeSettings.GLOBAL_TIMEZONE = env.TZ || 'UTC';
 
@@ -178,8 +177,7 @@ export default {
                     await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                       chat_id: chatId,
                       text:
-                        `✅ Exported decrypted messages!\n`, // +
-                      // JSON.stringify(result),
+                        `✅ Exported decrypted messages!\n`,
                       parse_mode: "Markdown",
                     });
                     // ctx.waitUntil(Promise.resolve());
@@ -214,7 +212,7 @@ export default {
                       try {
                         // Set default key if none exists
                         if (!env.ENCRYPTION_KEY) {
-                          env.ENCRYPTION_KEY = default_secret_key;
+                          env.ENCRYPTION_KEY = defaultSecretKey;
                           await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                             chat_id: chatId,
                             text: "🔐 No encryption key set!\n\nUsing default key...\nUse /setkey to change",
@@ -344,7 +342,7 @@ export default {
               }
 
               case "getkey": {
-                if (!env.ENCRYPTION_KEY || env.ENCRYPTION_KEY === default_secret_key) {
+                if (!env.ENCRYPTION_KEY || env.ENCRYPTION_KEY === defaultSecretKey) {
                   await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                     chat_id: chatId,
                     text:
@@ -378,7 +376,7 @@ export default {
           else if (messageText) {
             try {
               if (!env.ENCRYPTION_KEY) {
-                env.ENCRYPTION_KEY = default_secret_key;
+                env.ENCRYPTION_KEY = defaultSecretKey;
                 await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, {
                   chat_id: chatId,
                   text:
