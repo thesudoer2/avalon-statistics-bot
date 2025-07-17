@@ -1,7 +1,7 @@
 ﻿import * as TimeZone from './Time.js';
 import * as AESCrypto from "./AESCrypto.js";
 import * as GoogleAuth from './GoogleAuth.js';
-import serviceAccount from './sheets-api-project-465201-64087f908ace.json';
+import serviceAccount from './sheets-api-project.json';
 
 const spreadsheetId = 'GOOGLE_SPREED_SHEET_ID';
 const default_secret_key = "YOUR_SECRET_KEY";
