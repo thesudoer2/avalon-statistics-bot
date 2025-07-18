@@ -20,7 +20,7 @@ Encoded/Encrypted Data --decode--> Base64 Decode --decrypt--> Crypto AES Decrypt
 ```
 
 
-# Structure of jSON string
+## Structure of jSON string
 
 After decoding and decrypting the user's input message, the bot expects the main message (JSON string/object) to have the following structure:
 
@@ -107,7 +107,7 @@ After decoding and decrypting the user's input message, the bot expects the main
 
 ---
 
-## Data Format
+## Send Message To Bot
 
 Messages should be sent in the following format:
 
@@ -120,7 +120,7 @@ Messages should be sent in the following format:
 # Send message to bot by mentioning it
 <encrypted_message> @bot_id
 ```
-Where `<encrypted_message>` is an AES-encrypted JSON with game details (decribed [here](https://github.com/thesudoer2/avalon-statistics-bot/edit/master/README.md#encrypted-data-format)).
+Where `<encrypted_message>` is an AES-encrypted JSON with game details (decribed [here](https://github.com/thesudoer2/avalon-statistics-bot?tab=readme-ov-file#encrypted-data-format)).
 
 ---
 
