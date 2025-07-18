@@ -19,11 +19,10 @@ Game Data --create--> JSON Object --convert--> JSON String --encrypt--> Crypto A
 Encoded/Encrypted Data --decode--> Base64 Decode --decrypt--> Crypto AES Decryption --output--> JSON String --make-it-usable--> JSON Obj
 ```
 
----
 
-# Data Structure
+# Structure of jSON string
 
-After decoding and decrypting the user's input message, the bot expects the main message (in JSON format) to have the following structure:
+After decoding and decrypting the user's input message, the bot expects the main message (JSON string/object) to have the following structure:
 
 ```
 {
@@ -36,7 +35,8 @@ After decoding and decrypting the user's input message, the bot expects the main
    "game_info": {
       "timestamp": <game_timestamp>,
       "final_hash_of_game": "<game_hash>",
-      "game_seed": "<game_seed>"
+      "game_seed": "<game_seed>",
+      "winner": "<game_winner>"
    }
 }
 ```
