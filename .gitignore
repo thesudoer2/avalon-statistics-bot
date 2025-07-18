@@ -1,34 +1,13 @@
-# Ignore all
-*
-
-# Unignore all with extensions
-!*.*
-
-# Unignore all dirs
-!*/
-
-# Ignoring build/bin directories/files
-*build*
-bin
-
-# Ignoring QtCreator CMakeLists.txt.user file
-CMakeLists.txt.user
+# Resources
+res/*.json
 
 # Ignoring editor files
 .vscode
 *.swp
 
-# binary files
-test
-out.bin
-a.out
-
-# Ignoring assembler generated list files
-*.lst
-
-# odb auto generated files
-*-odb.*xx
--.s
-
 # Modules
 **/node_modules/*
+
+# Patch files
+**/*.patch
+**/*.diff
