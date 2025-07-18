@@ -86,11 +86,11 @@ After decoding and decrypting the user's input message, the bot expects the main
 
 2. **Configure Environment Variables**  
    You need to set the following environment variables for your deployment:
-   - `TELEGRAM_BOT_TOKEN` â€“ Token for your Telegram bot.
-   - `ADMIN_USER_ID` â€“ User ID of the bot admin.
-   - `DEFAULT_SECRET_KEY` â€“ Default encryption key (optional, but recommended).
-   - `KV_BINDING` â€“ KV namespace binding for Cloudflare Workers.
-   - `TZ` â€“ (Optional) Set timezone.
+   - `TELEGRAM_BOT_TOKEN` Token for your Telegram bot.
+   - `ADMIN_USER_ID` User ID of the bot admin.
+   - `DEFAULT_SECRET_KEY` Default encryption key (optional, but recommended).
+   - `KV_BINDING` KV namespace binding for Cloudflare Workers.
+   - `TZ` (Optional) Set timezone.
 
 3. **Deploy to Cloudflare Workers**  
    Use the [Cloudflare Workers documentation](https://developers.cloudflare.com/workers/) to deploy, or adapt for another serverless platform.
@@ -110,7 +110,7 @@ After decoding and decrypting the user's input message, the bot expects the main
 ## Data Format
 
 Messages should be sent in the following format:
----
+
 1) In private chat:
 ```
 <encrypted_message>
@@ -120,7 +120,7 @@ Messages should be sent in the following format:
 # Send message to bot by mentioning it
 <encrypted_message> @bot_id
 ```
-Where `<encrypted_message>` is an AES-encrypted JSON with game details (including a hash, timestamp, seed, winner, etc.).
+Where `<encrypted_message>` is an AES-encrypted JSON with game details (decribed [here](https://github.com/thesudoer2/avalon-statistics-bot/edit/master/README.md#encrypted-data-format)).
 
 ---
 
